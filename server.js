@@ -210,6 +210,81 @@ app.get("/internal/google-tokens", async (req, res) => {
     scope: data.scope,
   });
 });
+// ------------------------------------------------
+// 🔵 ROUTE — Get Access Token (avec refresh auto)
+// ------------------------------------------------
+app.get("/google/get-access-token", async (req, res) => {
+  const user_id = req.query.user_id;
+  if (!user_id) return res.status(400).send("Missing user_id");
+
+  try {
+    // 1. Récupération du token chiffré dans Supabase
+    const { data, error } = await supabase
+      .from("oauth_tokens")
+      .select("*")
+      .eq("user_id", user_id)
+      .eq("provider", "google")
+      .single();
+
+    if (error || !data) return res.status(404).send("No token found");
+
+    // 2. Déchiffrage
+    const decrypt = (enc) => {
+      const key = Buffer.from(process.env.TOKEN_ENC_KEY, "base64");
+      const [iv, tag, content] = enc.split(".").map(x => Buffer.from(x, "base64"));
+
+      const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+      decipher.setAuthTag(tag);
+
+      let dec = decipher.update(content, null, "utf8");
+      dec += decipher.final("utf8");
+      return dec;
+    };
+
+    let accessToken = decrypt(data.access_token_enc);
+    const refreshToken = decrypt(data.refresh_token_enc);
+
+    const now = Math.floor(Date.now() / 1000);
+
+    // 3. Si token expiré → rafraîchir
+    if (data.expires_at < now) {
+      console.log("🔄 Refreshing Google token...");
+
+      const refreshRes = await axios.post(
+        "https://oauth2.googleapis.com/token",
+        {
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          refresh_token: refreshToken,
+          grant_type: "refresh_token"
+        },
+        { headers: { "Content-Type": "application/json" } }
+      );
+
+      accessToken = refreshRes.data.access_token;
+
+      // 4. Ré-encryptage et sauvegarde
+      const newAccessEnc = encrypt(accessToken);
+      const newExpiresAt = Math.floor(Date.now() / 1000) + refreshRes.data.expires_in;
+
+      await supabase
+        .from("oauth_tokens")
+        .update({
+          access_token_enc: newAccessEnc,
+          expires_at: newExpiresAt
+        })
+        .eq("user_id", user_id)
+        .eq("provider", "google");
+    }
+
+    // 5. Retourner un vrai token
+    return res.json({ access_token: accessToken });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send("Server error");
+  }
+});
 app.listen(process.env.PORT || 3000, () => {
   console.log("🚀 Serveur backend lancé sur http://localhost:" + process.env.PORT);
 });
