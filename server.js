@@ -128,7 +128,56 @@ app.get('/auth/google/callback', async (req, res) => {
     return res.status(500).send("Erreur Google OAuth (voir console backend)");
   }
 });
+import crypto from "crypto";
 
+// Déchiffrement AES-256-GCM
+function decrypt(encrypted) {
+  const key = Buffer.from(process.env.TOKEN_ENC_KEY, "base64");
+  const [ivB64, tagB64, valueB64] = encrypted.split(".");
+
+  const iv = Buffer.from(ivB64, "base64");
+  const tag = Buffer.from(tagB64, "base64");
+  const value = Buffer.from(valueB64, "base64");
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+
+  let decrypted = decipher.update(value, undefined, "utf8");
+  decrypted += decipher.final("utf8");
+
+  return decrypted;
+}
+// ------------------------------------------------
+// 🔐 Route interne : /google/get-access-token
+// ------------------------------------------------
+app.get("/google/get-access-token", async (req, res) => {
+
+  const user_id = req.query.user_id;
+  if (!user_id) {
+    return res.status(400).json({ error: "Missing user_id" });
+  }
+
+  // Lire les tokens chiffrés
+  const { data, error } = await supabase
+    .from("oauth_tokens")
+    .select("*")
+    .eq("user_id", user_id)
+    .eq("provider", "google")
+    .single();
+
+  if (error) return res.status(500).json(error);
+
+  // Déchiffrer
+  const access_token = decrypt(data.access_token_enc);
+  const refresh_token = decrypt(data.refresh_token_enc);
+
+  // Retourner SIMPLE
+  return res.json({
+    access_token,
+    refresh_token,
+    expires_at: data.expires_at
+  });
+});
 // ------------------------------------------------
 // SERVEUR
 // ------------------------------------------------
