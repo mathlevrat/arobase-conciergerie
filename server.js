@@ -128,7 +128,6 @@ app.get('/auth/google/callback', async (req, res) => {
     return res.status(500).send("Erreur Google OAuth (voir console backend)");
   }
 });
-import crypto from "crypto";
 
 // Déchiffrement AES-256-GCM
 function decrypt(encrypted) {
