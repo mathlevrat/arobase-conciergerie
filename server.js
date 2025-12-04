@@ -132,6 +132,36 @@ app.get('/auth/google/callback', async (req, res) => {
 // ------------------------------------------------
 // SERVEUR
 // ------------------------------------------------
+// ------------------------------------------------
+// 🔐 ROUTE N8N POUR RÉCUPÉRER LES TOKENS GOOGLE
+// ------------------------------------------------
+app.get("/internal/google-tokens", async (req, res) => {
+  const apiKey = req.headers["x-api-key"];
+
+  // Vérification sécurité
+  if (apiKey !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const user_id = req.query.user_id;
+  if (!user_id) return res.status(400).json({ error: "Missing user_id" });
+
+  const { data, error } = await supabase
+    .from("oauth_tokens")
+    .select("*")
+    .eq("user_id", user_id)
+    .eq("provider", "google")
+    .single();
+
+  if (error) return res.status(500).json(error);
+
+  res.json({
+    access_token_enc: data.access_token_enc,
+    refresh_token_enc: data.refresh_token_enc,
+    expires_at: data.expires_at,
+    scope: data.scope,
+  });
+});
 app.listen(process.env.PORT || 3000, () => {
   console.log("🚀 Serveur backend lancé sur http://localhost:" + process.env.PORT);
 });
