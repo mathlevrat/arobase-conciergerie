@@ -64,10 +64,17 @@ app.get("/auth/google", async (req, res) => {
   if (!user_id) return res.status(400).send("Missing user_id");
 
   try {
-    // 🔄 Réinitialiser le provider Google pour générer de nouveaux scopes
+    // 1️⃣ Réinitialiser le provider Google pour cet utilisateur
     await supabase.auth.admin.updateUserById(user_id, { provider: "google" });
 
-    // 🔗 Construire le lien OAuth avec tous les scopes
+    // 2️⃣ Supprimer les anciens tokens OAuth stockés pour cet utilisateur
+    await supabase
+      .from("oauth_tokens")
+      .delete()
+      .eq("user_id", user_id)
+      .eq("provider", "google");
+
+    // 3️⃣ Construire le lien OAuth avec tous les scopes
     const GOOGLE_SCOPES = [
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile",
@@ -90,14 +97,14 @@ app.get("/auth/google", async (req, res) => {
       "&scope=" + encodeURIComponent(GOOGLE_SCOPES) +
       "&state=" + user_id;
 
+    // 4️⃣ Redirection vers Google OAuth
     res.redirect(redirect);
 
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Erreur serveur lors de la réinitialisation du provider");
+    console.error("Erreur route /auth/google :", err);
+    res.status(500).send("Erreur serveur lors de la réinitialisation du provider et des tokens");
   }
 });
-
 // ------------------------------------------------------
 // 🔵 ROUTE 2 — Google Callback
 // ------------------------------------------------------
