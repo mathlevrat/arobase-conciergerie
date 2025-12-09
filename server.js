@@ -199,7 +199,14 @@ app.get("/google/get-access-token", async (req, res) => {
     res.status(500).send("Error fetching token");
   }
 });
+// 🔵 ROUTE 4 — Force Reconnection Google
+app.get("/auth/google/refresh", (req, res) => {
+  const user_id = req.query.user_id;
+  if (!user_id) return res.status(400).send("Missing user_id");
 
+  // Redirige vers ta route Google OAuth existante
+  res.redirect(`/auth/google?user_id=${user_id}`);
+});
 // ------------------------------------------------------
 // 🟢 ROUTE INTERNE N8N
 // ------------------------------------------------------
