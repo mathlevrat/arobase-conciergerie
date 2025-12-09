@@ -59,44 +59,43 @@ const supabase = createClient(
 // ------------------------------------------------------
 // 🔵 ROUTE 1 — Google OAuth Redirect
 // ------------------------------------------------------
-const GOOGLE_SCOPES = [
-  // User info
-  "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/userinfo.profile",
-
-  // Gmail
-  "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.send",
-  "https://www.googleapis.com/auth/gmail.compose",
-
-  // Contacts
-  "https://www.googleapis.com/auth/contacts.readonly",
-  "https://www.googleapis.com/auth/contacts",
-
-  // Calendar
-  "https://www.googleapis.com/auth/calendar.readonly",
-  "https://www.googleapis.com/auth/calendar.events",
-].join(" ");
-
-app.get("/auth/google", (req, res) => {
+app.get("/auth/google", async (req, res) => {
   const user_id = req.query.user_id;
   if (!user_id) return res.status(400).send("Missing user_id");
 
-  const redirect =
-    "https://accounts.google.com/o/oauth2/v2/auth" +
-    "?client_id=" +
-    process.env.GOOGLE_CLIENT_ID +
-    "&redirect_uri=" +
-    encodeURIComponent(process.env.GOOGLE_REDIRECT_URI) +
-    "&response_type=code" +
-    "&access_type=offline" +
-    "&prompt=consent" +
-    "&scope=" +
-    encodeURIComponent(GOOGLE_SCOPES) +
-    "&state=" +
-    user_id;
+  try {
+    // 🔄 Réinitialiser le provider Google pour générer de nouveaux scopes
+    await supabase.auth.admin.updateUserById(user_id, { provider: "google" });
 
-  res.redirect(redirect);
+    // 🔗 Construire le lien OAuth avec tous les scopes
+    const GOOGLE_SCOPES = [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.send",
+      "https://www.googleapis.com/auth/gmail.compose",
+      "https://www.googleapis.com/auth/contacts.readonly",
+      "https://www.googleapis.com/auth/contacts",
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/calendar.events"
+    ].join(" ");
+
+    const redirect =
+      "https://accounts.google.com/o/oauth2/v2/auth" +
+      "?client_id=" + process.env.GOOGLE_CLIENT_ID +
+      "&redirect_uri=" + encodeURIComponent(process.env.GOOGLE_REDIRECT_URI) +
+      "&response_type=code" +
+      "&access_type=offline" +
+      "&prompt=consent" +
+      "&scope=" + encodeURIComponent(GOOGLE_SCOPES) +
+      "&state=" + user_id;
+
+    res.redirect(redirect);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Erreur serveur lors de la réinitialisation du provider");
+  }
 });
 
 // ------------------------------------------------------
@@ -199,14 +198,7 @@ app.get("/google/get-access-token", async (req, res) => {
     res.status(500).send("Error fetching token");
   }
 });
-// 🔵 ROUTE 4 — Force Reconnection Google
-app.get("/auth/google/refresh", (req, res) => {
-  const user_id = req.query.user_id;
-  if (!user_id) return res.status(400).send("Missing user_id");
 
-  // Redirige vers ta route Google OAuth existante
-  res.redirect(`/auth/google?user_id=${user_id}`);
-});
 // ------------------------------------------------------
 // 🟢 ROUTE INTERNE N8N
 // ------------------------------------------------------
